@@ -2,6 +2,7 @@ import pickle
 import os
 from br.bridge import Bridge
 from pathlib import Path
+import random
 
 '''
     Kline return value:
@@ -65,10 +66,11 @@ def get_length_for_all_pairs(save=True):
     '''
 
     file_path=Path("pairs_and_lengths.pkl")
-    if file_path.exists():
+    if file_path.exists() and save:
         with file_path.open('rb') as pickle_file:
             return pickle.load(pickle_file)
     else:
+        # keys are the symbol pairs, values is (number_of_ticks, path) tuple
         paired_lengths = {}
         data_dir_path=Path("../data")
         pruned_list=list(data_dir_path.glob("*pruned.pkl"))
@@ -79,13 +81,20 @@ def get_length_for_all_pairs(save=True):
                 if number_of_ticks<129:
                     print('the length of '+str(pruned)+" is too small.")
                 else:
-                    see=str(pruned).split()
-                    paired_lengths[see[1]]=(number_of_ticks,pruned)
-        with file_path.open('wb') as pickle_file:
-            pickle.dump(paired_lengths,pickle_file)
+                    filename_splitted=str(pruned).split()
+                    paired_lengths[filename_splitted[1]]=(number_of_ticks,pruned)
+        if save:
+            with file_path.open('wb') as pickle_file:
+                pickle.dump(paired_lengths,pickle_file)
     return paired_lengths
 
-def get_ticker_marker():
+def get_ticker_marker(batch_size):
+    '''
+    return batch_size number of tuple (ticker starting position, file_path)
+
+    :param batch_size:
+    :return:
+    '''
     pairs_lengths_path=Path("pairs_and_lengths.pkl")
     with pairs_lengths_path.open('rb') as lengths_file:
         paired_lengths=pickle.load(lengths_file)
@@ -93,10 +102,24 @@ def get_ticker_marker():
     # first we sample a pair, by weights decided by lengths
     # then we sample a starting position, evenly
 
-bridge=Bridge()
+    number_of_tickers=[value[0] for value in paired_lengths.values()]
+    count_path_tuples=paired_lengths.values()
+
+    sampled_count_path_tuples = random.choices(population=count_path_tuples,weights=number_of_tickers, k=batch_size)
+    double_sampled_count_path_tuples=[]
+
+    for count_path_tuple in sampled_count_path_tuples:
+        start_mark=random.randint(0,count_path_tuple[0]-128)
+        double_sampled_count_path_tuples.append((start_mark,count_path_tuple[1]))
+
+    return double_sampled_count_path_tuples
+#
+# bridge=Bridge()
 #
 # prune_and_save(bridge)
 # print("done")
+#
+# get_length_for_all_pairs()
 
-get_length_for_all_pairs()
-
+get_ticker_marker(128)
+print("done")
