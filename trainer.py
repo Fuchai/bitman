@@ -1,8 +1,15 @@
 import pickle
+from models.model import Model
+from pr.pruner import Pruner
+from parameters import *
 
-with open("pr/btc_klines_pruned.pkl",'rb') as pickle_file:
-    klines_dict=pickle.load(pickle_file)
+pruner=Pruner()
+batch_input=pruner.get_batch(time_length,batch_size)
 
-# the pruner has 120 pairs
-# each pair has varied lengths
-
+model=Model(input_size, hidden_size,
+                 num_layers, bias=True, batch_first=False,
+                 dropout=0, bidirectional=False)
+total_epochs=100
+epoch_batches=128
+for epoch in total_epochs:
+    pass

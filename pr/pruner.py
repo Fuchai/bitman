@@ -3,6 +3,7 @@ import os
 from br.bridge import Bridge
 from pathlib import Path
 import random
+from parameters import *
 
 '''
     Kline return value:
@@ -27,99 +28,115 @@ import random
     We need everything except for the open time, close time and the can be ignored.
 '''
 
+class Pruner():
 
-def prune_and_save(bridge, overwrite=False):
-    for symbol_pair in bridge.get_btc_symbols():
-        filename = bridge.get_file_name(symbol_pair)[:-4] + " pruned.pkl"
-        print(filename)
+    def __init__(self):
+        self.bridge=Bridge()
 
-        if os.path.isfile(filename) and overwrite == False:
-            print('pruned file already exists, no overwrite')
+    def prune_and_save(self, overwrite=False):
+        for symbol_pair in self.bridge.get_btc_symbols():
+            filename = self.bridge.get_file_name(symbol_pair)[:-4] + " pruned.pkl"
+            print(filename)
+
+            if os.path.isfile(filename) and overwrite == False:
+                print('pruned file already exists, no overwrite')
+            else:
+
+                with open(self.bridge.get_file_name(symbol_pair),'rb') as pickle_file:
+                    print("starting pruning "+symbol_pair)
+                    klines_list=pickle.load(pickle_file)
+                    pruned_klines_list=[]
+
+                    for kline in klines_list[symbol_pair]:
+                        kline.pop(0)
+                        kline.pop(5)
+                        kline.pop(-1)
+                        pruned_klines_list.append(kline)
+
+                    with open(filename,'wb') as pickle_save:
+                        pickle.dump(pruned_klines_list,pickle_save)
+
+
+    def get_length_for_all_pairs(self,save=True):
+        '''
+        128 tickers form up one unit of operation.
+        shuffled and fed into the network by batches
+
+        The dataset has many pairs of trades. To sample unbiasedly, we need to find out the
+        length of each pair of trade and produce the starting point of the 128-slice.
+
+        Can such slice be produced at runtime?
+        Maybe, why not?
+        :return:
+        '''
+
+        file_path=Path("pairs_and_lengths.pkl")
+        if file_path.exists() and save:
+            with file_path.open('rb') as pickle_file:
+                return pickle.load(pickle_file)
         else:
+            # keys are the symbol pairs, values is (number_of_ticks, path) tuple
+            paired_lengths = {}
+            data_dir_path=Path("../data")
+            pruned_list=list(data_dir_path.glob("*pruned.pkl"))
+            for pruned in pruned_list:
+                with pruned.open("rb") as pickle_file:
+                    klines=pickle.load(pickle_file)
+                    number_of_ticks=len(klines)
+                    if number_of_ticks<time_length:
+                        print('the length of '+str(pruned)+" is too small.")
+                    else:
+                        filename_splitted=str(pruned).split()
+                        paired_lengths[filename_splitted[1]]=(number_of_ticks,pruned)
+            if save:
+                with file_path.open('wb') as pickle_file:
+                    pickle.dump(paired_lengths,pickle_file)
+        return paired_lengths
 
-            with open(bridge.get_file_name(symbol_pair),'rb') as pickle_file:
-                print("starting pruning "+symbol_pair)
-                klines_list=pickle.load(pickle_file)
-                pruned_klines_list=[]
+    def get_ticker_marker(self,time_length,batch_size):
+        '''
+        return batch_size number of tuple (ticker starting position, file_path)
 
-                for kline in klines_list[symbol_pair]:
-                    kline.pop(0)
-                    kline.pop(5)
-                    kline.pop(-1)
-                    pruned_klines_list.append(kline)
+        :param time_length:
+        :param batch_size:
+        :return:
+        '''
+        pairs_lengths_path=Path("pairs_and_lengths.pkl")
+        with pairs_lengths_path.open('rb') as lengths_file:
+            paired_lengths=pickle.load(lengths_file)
 
-                with open(filename,'wb') as pickle_save:
-                    pickle.dump(pruned_klines_list,pickle_save)
+        # first we sample a pair, by weights decided by lengths
+        # then we sample a starting position, evenly
 
+        number_of_tickers=[value[0] for value in paired_lengths.values()]
+        count_path_tuples=list(paired_lengths.values())
 
-def get_length_for_all_pairs(save=True):
-    '''
-    128 tickers form up one unit of operation.
-    shuffled and fed into the network by batches
+        sampled_count_path_tuples = random.choices(population=count_path_tuples,weights=number_of_tickers, k=batch_size)
+        double_sampled_count_path_tuples=[]
 
-    The dataset has many pairs of trades. To sample unbiasedly, we need to find out the
-    length of each pair of trade and produce the starting point of the 128-slice.
+        for count_path_tuple in sampled_count_path_tuples:
+            start_mark=random.randint(0,count_path_tuple[0]-time_length)
+            double_sampled_count_path_tuples.append((start_mark,count_path_tuple[1]))
 
-    Can such slice be produced at runtime?
-    Maybe, why not?
-    :return:
-    '''
+        return double_sampled_count_path_tuples
 
-    file_path=Path("pairs_and_lengths.pkl")
-    if file_path.exists() and save:
-        with file_path.open('rb') as pickle_file:
-            return pickle.load(pickle_file)
-    else:
-        # keys are the symbol pairs, values is (number_of_ticks, path) tuple
-        paired_lengths = {}
-        data_dir_path=Path("../data")
-        pruned_list=list(data_dir_path.glob("*pruned.pkl"))
-        for pruned in pruned_list:
-            with pruned.open("rb") as pickle_file:
+    def get_batch(self,time_length,batch_size):
+        '''
+        opening file costs time. Consider, if memory permits, caching the read/write
+
+        :param time_length:
+        :param batch_size:
+        :return:
+        '''
+        ticker_marker=self.get_ticker_marker(time_length,batch_size)
+        batch_output=[]
+        for marker, path in ticker_marker:
+            with path.open("rb") as pickle_file:
                 klines=pickle.load(pickle_file)
-                number_of_ticks=len(klines)
-                if number_of_ticks<129:
-                    print('the length of '+str(pruned)+" is too small.")
-                else:
-                    filename_splitted=str(pruned).split()
-                    paired_lengths[filename_splitted[1]]=(number_of_ticks,pruned)
-        if save:
-            with file_path.open('wb') as pickle_file:
-                pickle.dump(paired_lengths,pickle_file)
-    return paired_lengths
+                batch_output.append(klines[marker:marker+time_length])
+        return batch_output
 
-def get_ticker_marker(batch_size):
-    '''
-    return batch_size number of tuple (ticker starting position, file_path)
-
-    :param batch_size:
-    :return:
-    '''
-    pairs_lengths_path=Path("pairs_and_lengths.pkl")
-    with pairs_lengths_path.open('rb') as lengths_file:
-        paired_lengths=pickle.load(lengths_file)
-
-    # first we sample a pair, by weights decided by lengths
-    # then we sample a starting position, evenly
-
-    number_of_tickers=[value[0] for value in paired_lengths.values()]
-    count_path_tuples=paired_lengths.values()
-
-    sampled_count_path_tuples = random.choices(population=count_path_tuples,weights=number_of_tickers, k=batch_size)
-    double_sampled_count_path_tuples=[]
-
-    for count_path_tuple in sampled_count_path_tuples:
-        start_mark=random.randint(0,count_path_tuple[0]-128)
-        double_sampled_count_path_tuples.append((start_mark,count_path_tuple[1]))
-
-    return double_sampled_count_path_tuples
-#
-# bridge=Bridge()
-#
-# prune_and_save(bridge)
-# print("done")
-#
-# get_length_for_all_pairs()
-
-get_ticker_marker(128)
-print("done")
+if __name__=="__main__":
+    pruner=Pruner()
+    hello=pruner.get_batch(time_length,batch_size)
+    print("done")
