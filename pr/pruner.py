@@ -33,6 +33,15 @@ class Pruner():
     def __init__(self):
         self.bridge=Bridge()
 
+    def reprepare(self):
+        '''
+        rewrites all data
+        :return:
+        '''
+        self.prune_and_save(overwrite=True)
+        self.get_length_for_all_pairs(load=False,save=True)
+
+
     def prune_and_save(self, overwrite=False):
 
         '''
@@ -55,7 +64,6 @@ class Pruner():
             if os.path.isfile(filename) and overwrite == False:
                 print('pruned file already exists, no overwrite')
             else:
-
                 with open(self.bridge.get_file_name(symbol_pair),'rb') as pickle_file:
                     print("starting pruning "+symbol_pair)
                     klines_list=pickle.load(pickle_file)
@@ -65,6 +73,7 @@ class Pruner():
                         kline.pop(0)
                         kline.pop(5)
                         kline.pop(-1)
+                        kline=list(map(float,kline))
                         pruned_klines_list.append(kline)
 
                     with open(filename,'wb') as pickle_save:
@@ -84,14 +93,20 @@ class Pruner():
         :return:
         '''
 
-        file_path=Path("pr/pairs_and_lengths.pkl")
+        if "pr" in str(Path.cwd()):
+            file_path=Path("pairs_and_lengths.pkl")
+        else:
+            file_path=Path("pr/pairs_and_lengths.pkl")
         if file_path.exists() and load:
             with file_path.open('rb') as pickle_file:
                 return pickle.load(pickle_file)
         else:
             # keys are the symbol pairs, values is (number_of_ticks, path) tuple
             paired_lengths = {}
-            data_dir_path=Path("data")
+            if "pr" in str(Path.cwd()):
+                data_dir_path=Path("../data")
+            else:
+                data_dir_path=Path("data")
             pruned_list=list(data_dir_path.glob("*pruned.pkl"))
             for pruned in pruned_list:
                 with pruned.open("rb") as pickle_file:
@@ -101,7 +116,12 @@ class Pruner():
                         print('the length of '+str(pruned)+" is too small.")
                     else:
                         filename_splitted=str(pruned).split()
-                        paired_lengths[filename_splitted[1]]=(number_of_ticks,pruned)
+                        if "pr" in str(Path.cwd()):
+                            # if "pr" is in the path, then pruned will look like "../data/abc.data"
+                            # this line makes it so that the path looks like "data/abc.data"
+                            paired_lengths[filename_splitted[1]] = (number_of_ticks, Path(*pruned.parts[2:]))
+                        else:
+                            paired_lengths[filename_splitted[1]] = (number_of_ticks, pruned)
             if save:
                 with file_path.open('wb') as pickle_file:
                     pickle.dump(paired_lengths,pickle_file)
@@ -115,7 +135,10 @@ class Pruner():
         :param batch_size:
         :return:
         '''
-        pairs_lengths_path=Path("pr/pairs_and_lengths.pkl")
+        if "pr" in str(Path.cwd()):
+            pairs_lengths_path=Path("../pr/pairs_and_lengths.pkl")
+        else:
+            pairs_lengths_path=Path("pr/pairs_and_lengths.pkl")
         with pairs_lengths_path.open('rb') as lengths_file:
             paired_lengths=pickle.load(lengths_file)
 
@@ -158,5 +181,6 @@ class Pruner():
 
 if __name__=="__main__":
     pruner=Pruner()
+    pruner.reprepare()
     hello=pruner.get_batch(time_length,batch_size)
     print("done")

@@ -1,4 +1,4 @@
 from parameters import *
-from models.RNN import RMM
+from models.RMM import RMM
 
 Model=RMM

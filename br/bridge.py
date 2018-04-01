@@ -3,6 +3,7 @@ from br.myapi import *
 import pickle
 import re
 import os
+import pathlib
 
 def some_test():
     from_cache=True
@@ -92,7 +93,10 @@ class Bridge():
         return self.client.get_historical_klines(symbol, interval, start_str, end_str)
 
     def get_file_name(self,btc_symbol,interval=" 15 minute"):
-        return "../data/btc_klines " + btc_symbol + interval+ ".pkl"
+        if 'data' in str(pathlib.Path.cwd()):
+            return "btc_klines " + btc_symbol + interval+ ".pkl"
+        else:
+            return "data/btc_klines " + btc_symbol + interval+ ".pkl"
 
     def get_btc_symbols(self):
         symbols = self.get_all_symbols()
