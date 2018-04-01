@@ -14,6 +14,6 @@ class RMM(RNN):
     def __init__(self,input_size, hidden_size,
                  num_layers=1, bias=True, batch_first=False,
                  dropout=0, bidirectional=False):
-        super(RMM, self).__init__(input_size,hidden_size,num_layers,
-                                  num_layers,bias,batch_first,
-                                  dropout,bidirectional)
+        super(RMM, self).__init__(input_size=input_size,hidden_size=hidden_size,
+                                  num_layers=num_layers,bias=bias,batch_first=batch_first,
+                                  dropout=dropout,bidirectional=bidirectional)
